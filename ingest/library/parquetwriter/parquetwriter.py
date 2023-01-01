@@ -2,6 +2,7 @@ import pyarrow as pa
 from pyarrow import parquet as pq
 import uuid
 import s3fs
+import logging
 
 
 def _get_pa_table_from_reader(reader_generator):
@@ -39,7 +40,7 @@ class ParquetWriter:
                     filesystem=s3fs.S3FileSystem(),
                     basename_template=basename_template.format(internal_increment=i)
                 )
-                print(f'printed file number : {basename_template.format(internal_increment=i)}')
+                logging.info(f'printed file to s3: {basename_template.format(internal_increment=i)}')
         except Exception as e:
             print(f'Error writing to S3: {e}')
             raise
