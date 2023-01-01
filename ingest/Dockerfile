@@ -1,18 +1,12 @@
-FROM python:3
+FROM public.ecr.aws/lambda/python:3.9
 
-# set a directory for the app
-WORKDIR /usr/src/app
-
-# copy all the files to the container
-COPY . .
-
+COPY requirements.txt  .
 # install dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-ENV AM_I_IN_A_DOCKER_CONTAINER Yes
+RUN  pip install -r requirements.txt --target "${LAMBDA_TASK_ROOT}"
 
-# tell the port number the container should expose
-EXPOSE 5000
+# Copy function code
+COPY app.py ${LAMBDA_TASK_ROOT}
+ADD library ${LAMBDA_TASK_ROOT}/library/
 
-# run the command
-CMD ["python", "./main.py"]
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+CMD [ "app.handler" ]
