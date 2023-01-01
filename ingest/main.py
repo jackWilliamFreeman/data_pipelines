@@ -1,26 +1,27 @@
-import sources.rdbms as rdbms
-import pyarrow as pa
-from pyarrow import parquet as pq
-import uuid
-import s3fs
+from library.parquetwriter.parquetwriter import ParquetWriter
+from library.sources.rdbms import RDBMSSource
+from dotenv import load_dotenv
+import json
 
-# these come from lambda invoke
-TARGET = 'students'
+# for development .env files
+load_dotenv()
 
-database_source = rdbms.RDBMSSource(TARGET)
-reader = database_source.get_data_in_chunks()
 
-root_path = f's3://schooldb/ingest_data/{TARGET}/'
-batch_id = str(uuid.uuid4())
-final_path = root_path + batch_id + '/'
-basename_template = f"{TARGET}-{{internal_increment:04d}}-{{{{i}}}}.parquet"
+def lambda_handler(event, context):
+    # TODO implement
+    source_name = event.get('source_name')
 
-for i, table in enumerate(rdbms.get_pa_table_from_reader(reader)):
-    writer = pa.BufferOutputStream()
-    pq.write_to_dataset(
-        table=table,
-        root_path=final_path,
-        filesystem=s3fs.S3FileSystem(),
-        basename_template=basename_template.format(internal_increment=i)
-    )
-    print('printed')
+    database_source = RDBMSSource(source_name)
+    reader = database_source.get_data_in_chunks()
+
+    writer = ParquetWriter(source_name)
+    writer.write_generator_parquet_to_s3(reader)
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+
+
+if __name__ == '__main__':
+    lambda_handler('students', None)

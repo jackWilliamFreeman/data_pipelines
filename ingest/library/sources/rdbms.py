@@ -1,11 +1,21 @@
 from sqlalchemy import create_engine
 from datetime import datetime
+
 import boto3
 import json
 import pyarrow as pa
 import os
+import sys
 
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'dev')
+sys.path.append('/library/')
+from ingest.library.watermarks import watermarks
+
+
+def _get_env():
+    environment = os.getenv('ENVIRONMENT')
+    if not environment:
+        raise Exception('could not get env variable for environment')
+    return environment
 
 
 def _set_engine(url, database, password, user):
@@ -18,12 +28,12 @@ def _set_engine(url, database, password, user):
     return engine
 
 
-def _get_parameters_for_source(ENVIRONMENT, source_name):
+def _get_parameters_for_source(env_name, source_name):
     """This accepts an argument of environment and target, this calls ssm parameter store to get credentials and
     details etc """
     try:
         ssm = boto3.client('ssm')
-        param_name = f'/pipeline/{ENVIRONMENT}/ingest/{source_name}'
+        param_name = f'/pipeline/{env_name}/ingest/{source_name}'
         parameter = ssm.get_parameter(Name=param_name, WithDecryption=True)
         parameter_dict = json.loads(parameter['Parameter']['Value'])
 
@@ -38,34 +48,35 @@ def _get_parameters_for_source(ENVIRONMENT, source_name):
         return url, database, password, username
 
     except Exception as e:
-        print(f'Error calling to ssm parameter at location /pipeline/{ENVIRONMENT}/ingest/{source_name} with error: {e}')
+        print(f'Error calling to ssm parameter at location /pipeline/{env_name}/ingest/{source_name} with error: {e}')
         raise
 
 
-def get_pa_table_from_reader(reader_generator):
-    """pass in a generator from source reader object, needs to output a column dict and a chunk of data from a
-    cursor """
-    for columns, chunk in reader_generator:
-        col_data_arrays = []
-        for i, key in enumerate(columns):
-            pa_column_type = columns[key][1]
-            if not pa_column_type:
-                raise Exception(f'Could not get pyarrow data type for column {key}')
-            col_data = [row[i] for row in chunk]
-            col_data_arrays.append(pa.array(col_data, type=pa_column_type))
-        col_names = [key for key in columns]
-        table = pa.Table.from_arrays(col_data_arrays, col_names)
-        yield table
+def _get_config_for_source(environment, source_name):
+    dynamodb = boto3.resource('dynamodb')
+    table_name = f'ingest_config_{environment}'
+    table = dynamodb.Table(table_name)
+
+    key = {'pk': source_name, 'sk': 'configuration'}
+    config = table.get_item(
+        TableName=table_name,
+        Key=key
+    )
+    return config['Item']
 
 
 class RDBMSSource:
     """class for containing RDBMS logic for connecting and querying sources for RDBMS"""
 
     def __init__(self, source_name, sql_strain='mysql'):
-        self.query = 'select * from students'
-        url, database, password, user = _get_parameters_for_source(ENVIRONMENT, source_name)
+        self.source_name = source_name
+        self.environment = _get_env()
+        url, database, password, user = _get_parameters_for_source(self.environment, source_name)
         self.engine = _set_engine(url, database, password, user)
         # todo further config calls
+        self.ingest_config = _get_config_for_source(self.environment, self.source_name)
+        self.watermark = watermarks.Watermark(self.source_name)
+        self.query = self.format_query()
         self.batch_size = 200
         if sql_strain != 'mysql':
             raise NotImplementedError('Only support MySql for now sorry.')
@@ -108,3 +119,23 @@ class RDBMSSource:
                 raise
             finally:
                 connection.close()
+
+    def format_query(self):
+        if not self.ingest_config:
+            raise Exception('Config is required to format the query')
+        base_query = f'select * from {self.source_name}'
+        if self.ingest_config.get('has_watermark'):
+            watermark_cols = self.ingest_config.get('watermark_columns')
+            base_query = base_query + ' where ('
+            for i, watermark_col in enumerate(watermark_cols):
+                if i > 0:
+                    or_text = ' or '
+                else:
+                    or_text = ''
+                criteria_text = "{watermark_column} >= '{watermark_value}'".format(
+                    watermark_column=watermark_col,
+                    watermark_value=self.watermark.current_watermark
+                )
+                base_query = base_query + or_text + criteria_text
+            base_query = base_query + ')'
+        return base_query
