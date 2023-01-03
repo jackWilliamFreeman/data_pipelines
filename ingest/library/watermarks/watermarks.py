@@ -1,5 +1,6 @@
 import boto3
 import os
+from datetime import datetime
 
 
 def _get_dynamo_table():
@@ -30,6 +31,8 @@ class Watermark:
         self.table_name = table_details[1]
         self.current_watermark = None
         self.previous_watermark = None
+        self.watermark_updated = False
+        self.current_working_watermark = None
         self._get_watermark()
 
     def _get_watermark(self):
@@ -39,8 +42,24 @@ class Watermark:
                 Key={'pk': self.source, 'sk': 'watermark'}
             )
             watermark_text = response['Item']
-            self.current_watermark = watermark_text.get('current_watermark')
-            self.previous_watermark = watermark_text.get('previous_watermark')
+            self.current_watermark = datetime.strptime(watermark_text.get('current_watermark'), '%Y-%m-%d %H:%M:%S')
+            self.previous_watermark = datetime.strptime(watermark_text.get('previous_watermark'), '%Y-%m-%d %H:%M:%S')
+            self.current_working_watermark = self.current_watermark
         except Exception as e:
             print(f'error getting watermark from DynamoDb with error: {e}')
+            raise
+
+    def update_watermark(self):
+        try:
+            self.dynamo_table.put_item(
+                TableName=self.table_name,
+                Item={
+                    'pk': self.source,
+                    'sk': 'watermark',
+                    'current_watermark': str(self.current_working_watermark),
+                    'previous_watermark': str(self.current_watermark)
+                }
+            )
+        except Exception as e:
+            print(f'error setting watermark from DynamoDb with error: {e}')
             raise

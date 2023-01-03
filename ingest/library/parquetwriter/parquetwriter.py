@@ -9,6 +9,9 @@ def _get_pa_table_from_reader(reader_generator):
     """pass in a generator from source reader object, needs to output a column dict and a chunk of data from a
     cursor """
     for columns, chunk in reader_generator:
+        if len(chunk) == 0:
+            print('no records to write')
+            break
         col_data_arrays = []
         for i, key in enumerate(columns):
             pa_column_type = columns[key][1]

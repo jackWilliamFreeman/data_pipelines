@@ -6,8 +6,6 @@ import json
 import pyarrow as pa
 import os
 
-from library.watermarks import watermarks
-
 
 def _get_env():
     environment = os.getenv('ENVIRONMENT')
@@ -66,18 +64,20 @@ def _get_config_for_source(environment, source_name):
 class RDBMSSource:
     """class for containing RDBMS logic for connecting and querying sources for RDBMS"""
 
-    def __init__(self, source_name, sql_strain='mysql'):
+    def __init__(self, source_name, ingest_config, watermark=None, sql_strain='mysql'):
         self.source_name = source_name
         self.environment = _get_env()
         url, database, password, user = _get_parameters_for_source(self.environment, source_name)
         self.engine = _set_engine(url, database, password, user)
         # todo further config calls
-        self.ingest_config = _get_config_for_source(self.environment, self.source_name)
-        self.watermark = watermarks.Watermark(self.source_name)
+        self.ingest_config = ingest_config
+        self.watermark = watermark
         self.query = self.format_query()
         self.batch_size = 200
         if sql_strain != 'mysql':
             raise NotImplementedError('Only support MySql for now sorry.')
+        self.new_watermark = None
+        self.new_max_watermark_value = None
 
     # mapping for types from describe cursors to python and pyarrow types
     _type_map = {
@@ -107,9 +107,29 @@ class RDBMSSource:
                     logging.info(f'schema is : {column_schema}')
                     result_cursor.arraysize = 10000
 
+                    # TODO evaluate the chunks for the max watermark
                     while True:
                         chunk = result_cursor.fetchmany(self.batch_size)
-                        if not chunk:
+                        if self.watermark:
+                            watermark_cols = self.ingest_config.get('watermark_columns')
+                            watermark_indexes = []
+                            for i, col in enumerate(cursor_desc):
+                                if col[0] in watermark_cols:
+                                    watermark_indexes.append(i)
+                            if len(watermark_indexes) == 0:
+                                raise Exception(f'Could not find watermark columns: {watermark_cols} in cursor '
+                                                f'description')
+                            current_watermark_max = self.watermark.current_watermark
+                            for row in chunk:
+                                watermark_values = [row[i] for i in watermark_indexes if row[i]]
+                                row_max_watermark = max(watermark_values)
+                                if current_watermark_max < row_max_watermark:
+                                    current_watermark_max = row_max_watermark
+                            if current_watermark_max > self.watermark.current_working_watermark:
+                                self.watermark.current_working_watermark = current_watermark_max
+                                self.watermark.watermark_updated = True
+                        if not chunk or len(chunk) == 0:
+                            print('no records to write or end of cursor')
                             break
                         yield column_schema, chunk
 
@@ -131,7 +151,7 @@ class RDBMSSource:
                     or_text = ' or '
                 else:
                     or_text = ''
-                criteria_text = "{watermark_column} >= '{watermark_value}'".format(
+                criteria_text = "{watermark_column} > '{watermark_value}'".format(
                     watermark_column=watermark_col,
                     watermark_value=self.watermark.current_watermark
                 )
