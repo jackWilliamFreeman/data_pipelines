@@ -36,6 +36,7 @@ class ParquetWriter:
         basename_template = f"{self.source_name}-{{internal_increment:04d}}-{{{{i}}}}.parquet"
 
         try:
+            record_count = 0
             for i, table in enumerate(_get_pa_table_from_reader(generator)):
                 pq.write_to_dataset(
                     table=table,
@@ -44,6 +45,8 @@ class ParquetWriter:
                     basename_template=basename_template.format(internal_increment=i)
                 )
                 logging.info(f'printed file to s3: {basename_template.format(internal_increment=i)}')
+                record_count += len(table)
+            return batch_id, record_count
         except Exception as e:
             print(f'Error writing to S3: {e}')
             raise

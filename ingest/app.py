@@ -4,7 +4,6 @@ from library.watermarks import watermarks
 from dotenv import load_dotenv
 import json
 import logging
-import datetime
 import boto3
 import os
 
@@ -48,7 +47,7 @@ def lambda_handler(event, context):
 
     # write to s3
     writer = ParquetWriter(source_name)
-    writer.write_generator_parquet_to_s3(reader)
+    batch_id, record_count = writer.write_generator_parquet_to_s3(reader)
 
     # update the watermark when finished
     if watermark.watermark_updated:
@@ -56,9 +55,9 @@ def lambda_handler(event, context):
 
     return {
         'statusCode': 200,
-        'body': json.dumps(f'ingest completed for {source_name}')
+        'body': json.dumps(f'ingest completed for {source_name} with Batch ID: {batch_id} with {record_count} records ingested')
     }
 
 
 if __name__ == '__main__':
-    lambda_handler({'source_name': 'students'}, None)
+    print(lambda_handler({'source_name': 'students'}, None))
