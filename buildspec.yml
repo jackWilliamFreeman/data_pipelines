@@ -2,6 +2,17 @@ version: 0.2
 phases:
   pre_build:
     commands:
+      - echo Entered the pre_build phase...
+      - echo $CODEBUILD_RESOLVED_SOURCE_VERSION
+      - COMMIT_ID=$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo $COMMIT_ID
+      - echo $CODEBUILD_SOURCE_VERSION
+      - echo $CODEBUILD_WEBHOOK_BASE_REF
+      - echo $CODEBUILD_WEBHOOK_EVENT
+      - echo $CODEBUILD_WEBHOOK_PREV_COMMIT
+      - echo $CODEBUILD_WEBHOOK_HEAD_REF
+      - echo $CODEBUILD_WEBHOOK_TRIGGER
+      - echo $AWS_ACCOUNT_ID
       - echo Logging in to Amazon ECR...
       - echo looking for ECR repo in $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
