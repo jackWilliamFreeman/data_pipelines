@@ -3,13 +3,11 @@ from library.sources.rdbms import RDBMSSource
 from library.watermarks import watermarks
 from dotenv import load_dotenv
 import json
-import logging
 import boto3
 import os
 
 # for development .env files
 load_dotenv()
-logging.getLogger().setLevel(logging.INFO)
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'dev')
 
 
@@ -31,7 +29,7 @@ def _get_config_for_source(environment, source_name):
 def lambda_handler(event, context):
     source_name = event.get('source_name')
     print(f'starting ingest for {source_name}')
-    logging.info(f'source name is {source_name}')
+    print(f'source name is {source_name}')
 
     config = _get_config_for_source(ENVIRONMENT, source_name)
     if config.get('has_watermark'):
@@ -41,9 +39,9 @@ def lambda_handler(event, context):
 
     # get records in chunks from db
     database_source = RDBMSSource(source_name, config, watermark)
-    logging.info(f'connected to database success')
+    print(f'connected to database success')
     reader = database_source.get_data_in_chunks()
-    logging.info('got reader success')
+    print('got reader success')
 
     # write to s3
     writer = ParquetWriter(source_name)
@@ -55,7 +53,8 @@ def lambda_handler(event, context):
 
     return {
         'statusCode': 200,
-        'body': json.dumps(f'ingest completed for {source_name} with Batch ID: {batch_id} with {record_count} records ingested')
+        'body': json.dumps(
+            f'ingest completed for {source_name} with Batch ID: {batch_id} with {record_count} records ingested')
     }
 
 

@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine
 from datetime import datetime
-import logging
 import boto3
 import json
 import pyarrow as pa
@@ -104,7 +103,7 @@ class RDBMSSource:
                     cursor_desc = result_cursor.description
 
                     column_schema = {column[0]: self._type_map.get(column[1]) for column in cursor_desc}
-                    logging.info(f'schema is : {column_schema}')
+                    print(f'schema is : {column_schema}')
                     result_cursor.arraysize = 10000
 
                     # TODO evaluate the chunks for the max watermark
