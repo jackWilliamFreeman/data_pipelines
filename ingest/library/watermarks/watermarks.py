@@ -42,8 +42,11 @@ class Watermark:
                 Key={'pk': self.source, 'sk': 'watermark'}
             )
             watermark_text = response['Item']
-            self.current_watermark = datetime.strptime(watermark_text.get('current_watermark'), '%Y-%m-%d %H:%M:%S')
-            self.previous_watermark = datetime.strptime(watermark_text.get('previous_watermark'), '%Y-%m-%d %H:%M:%S')
+            try:
+                self.current_watermark = datetime.strptime(watermark_text.get('current_watermark'), '%Y-%m-%d %H:%M:%S')
+                self.previous_watermark = datetime.strptime(watermark_text.get('previous_watermark'), '%Y-%m-%d %H:%M:%S')
+            except Exception as e:
+                print(f'could not set watermarks with error potentially caused by string format issues in dynamodb: {e}')
             self.current_working_watermark = self.current_watermark
         except Exception as e:
             print(f'error getting watermark from DynamoDb with error: {e}')
