@@ -12,7 +12,10 @@ phases:
   build:
     commands:
       - moving to docker location
+      - echo pwd
+      - dir
       - cd ingest
+      - echo pwd
       - echo Build started on `date`
       - echo Building the Docker image...
       - docker build -t $IMAGE_REPO_NAME:lastest .
