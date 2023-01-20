@@ -2,3 +2,4 @@ venv
 ingest/.env
 __pycache__
 package/
+*.tfvars

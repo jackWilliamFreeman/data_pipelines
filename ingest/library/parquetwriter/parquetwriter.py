@@ -27,7 +27,7 @@ class ParquetWriter:
 
     def __init__(self, source_name):
         self.source_name = source_name
-        self.root_path = f's3://schooldb/ingest_data/{self.source_name}/'
+        self.root_path = f's3://raw-data-pipelines-dev/ingest_data/{self.source_name}/'
 
     def write_generator_parquet_to_s3(self, generator):
         batch_id = str(uuid.uuid4())
@@ -40,7 +40,9 @@ class ParquetWriter:
                 pq.write_to_dataset(
                     table=table,
                     root_path=final_path,
-                    filesystem=s3fs.S3FileSystem(),
+                    filesystem=s3fs.S3FileSystem(client_kwargs={
+                        'region_name': 'ap-southeast-2'
+                    }),
                     basename_template=basename_template.format(internal_increment=i)
                 )
                 print(f'printed file to s3: {basename_template.format(internal_increment=i)}')
